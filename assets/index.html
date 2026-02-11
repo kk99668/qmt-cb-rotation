@@ -1,0 +1,1984 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMT自动调仓</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        /* 登录页面样式 */
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            width: 400px;
+        }
+
+        .login-box h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+            font-size: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            font-size: 12px;
+            margin-top: 10px;
+            display: none;
+            text-align: center;
+        }
+
+        /* 风险提示遮罩 */
+        .risk-disclaimer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 99999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .risk-disclaimer-box {
+            background: white;
+            padding: 32px 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            width: 520px;
+            max-width: 90vw;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .risk-disclaimer-box h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        .risk-disclaimer-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.8;
+            color: #333;
+        }
+
+        .risk-disclaimer-content p {
+            margin-bottom: 8px;
+        }
+
+        .risk-disclaimer-box .btn {
+            align-self: flex-end;
+            width: auto;
+            padding: 10px 24px;
+        }
+
+        /* 主界面样式 */
+        .main-container {
+            display: none;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .current-strategy {
+            padding: 5px 12px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 5px;
+            font-size: 13px;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .current-strategy.empty {
+            color: #95a5a6;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 4px;
+            transition: background 0.3s;
+            font-size: 13px;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .icon-btn.running {
+            background: rgba(39, 174, 96, 0.3);
+            color: #2ecc71;
+        }
+
+        .icon-btn.running:hover {
+            background: rgba(39, 174, 96, 0.4);
+        }
+
+        .content-wrapper {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+
+        .panel h2 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #2c3e50;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .status-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .status-card h3 {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: normal;
+        }
+
+        .status-card .value {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .status-card .status {
+            margin-top: 8px;
+            font-size: 12px;
+        }
+
+        .status-running {
+            color: #27ae60;
+        }
+
+        .status-stopped {
+            color: #e74c3c;
+        }
+
+        .holdings-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .holdings-table th,
+        .holdings-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+            font-size: 13px;
+        }
+
+        .holdings-table th {
+            background: #f8f9fa;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .holdings-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .profit-positive {
+            color: #e74c3c;
+        }
+
+        .profit-negative {
+            color: #27ae60;
+        }
+
+        .log-area {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+            padding: 2px 0;
+        }
+
+        .log-time {
+            color: #6a9955;
+        }
+
+        .log-INFO {
+            color: #569cd6;
+        }
+
+        .log-SUCCESS {
+            color: #4ec9b0;
+        }
+
+        .log-WARNING {
+            color: #dcdcaa;
+        }
+
+        .log-ERROR {
+            color: #f14c4c;
+        }
+
+        /* 模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 25px;
+            position: relative;
+        }
+
+        .modal-content h1 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+
+        /* 策略选择模态框 */
+        .strategy-modal-content {
+            max-width: 900px;
+        }
+
+        .strategy-selection-area {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .strategy-selection-panel {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .strategy-selection-panel h2 {
+            font-size: 15px;
+            margin-bottom: 12px;
+            color: #2c3e50;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 6px;
+        }
+
+        .strategy-list {
+            list-style: none;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .strategy-item {
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 13px;
+        }
+
+        .strategy-item:hover {
+            background: #e9ecef;
+        }
+
+        .strategy-item.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .backtest-item-detail {
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .backtest-item-detail:hover {
+            background: #e9ecef;
+        }
+
+        .backtest-item-detail.selected {
+            background: #667eea;
+            color: white;
+        }
+
+        .backtest-item-detail h3 {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .backtest-item-detail p {
+            font-size: 11px;
+            opacity: 0.8;
+            margin: 0;
+        }
+
+        .backtest-selection-panel.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin-top: 12px;
+        }
+
+        .page-btn {
+            padding: 4px 10px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .page-btn:hover {
+            background: #f8f9fa;
+        }
+
+        .page-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        /* 配置表单 */
+        .config-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .config-item label {
+            margin-bottom: 6px;
+            color: #555;
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .config-item input,
+        .config-item select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+
+        .config-item input:focus,
+        .config-item select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 20px;
+            margin-top: 5px;
+        }
+
+        .radio-group label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            font-weight: normal;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-cancel {
+            background: #95a5a6;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-cancel:hover {
+            background: #7f8c8d;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        /* 帮助文档 */
+        .help-section {
+            margin-bottom: 25px;
+        }
+
+        .help-section h2 {
+            color: #2c3e50;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+
+        .help-section p {
+            line-height: 1.6;
+            color: #555;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .help-link {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .help-link:hover {
+            text-decoration: underline;
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .empty-tip {
+            color: #999;
+            text-align: center;
+            padding: 30px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 风险提示遮罩（启动时显示，用户确认后隐藏） -->
+    <div class="risk-disclaimer-overlay" id="riskDisclaimerOverlay">
+        <div class="risk-disclaimer-box">
+            <h2>风险提示</h2>
+            <div class="risk-disclaimer-content">
+                <p>1. 本工具为开源学习项目，非官方、非商用。</p>
+                <p>2. 作者不对使用本工具产生的任何盈利、亏损、交易异常、资金损失承担责任。</p>
+                <p>3. 可转债交易、轮动策略均存在市场波动、流动性、规则变化等风险。</p>
+                <p>4. 使用本工具即视为已充分理解风险，所有操作与风险自行承担。</p>
+                <p>5. 投资有风险，入市需谨慎。</p>
+            </div>
+            <button type="button" class="btn" id="riskDisclaimerConfirm">我已阅读并同意</button>
+        </div>
+    </div>
+
+    <!-- 登录页面 -->
+    <div class="login-container" id="loginContainer">
+        <div class="login-box">
+            <h1>🐱 QMT自动调仓</h1>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">账号</label>
+                    <input type="text" id="username" name="username" placeholder="请输入账号" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" name="password" placeholder="请输入密码" required>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="rememberPassword">
+                        记住密码
+                    </label>
+                    <label>
+                        <input type="checkbox" id="autoLogin">
+                        自动登录
+                    </label>
+                </div>
+                <button type="submit" class="btn" id="loginBtn">登录</button>
+                <div class="error-message" id="loginError"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div class="main-container" id="mainContainer">
+        <div class="header">
+            <h1>QMT自动调仓</h1>
+            <div class="header-actions">
+                <button class="icon-btn" id="selectStrategyBtn">📋 选择策略</button>
+                <span class="current-strategy empty" id="currentStrategy">未选择策略</span>
+                <button class="icon-btn" id="runBtn">▶️ 运行</button>
+                <button class="icon-btn" id="configBtn">⚙️ 设置</button>
+                <button class="icon-btn" id="helpBtn">❓ 帮助</button>
+                <span id="userInfo">用户：-</span>
+            </div>
+        </div>
+
+        <div class="content-wrapper">
+            <div class="main-content">
+                <!-- 交易状态监控 -->
+                <div class="panel">
+                    <h2>交易状态监控</h2>
+                    <div class="status-grid">
+                        <div class="status-card">
+                            <h3>自动交易状态</h3>
+                            <div class="value" id="tradingStatus">未运行</div>
+                            <div class="status status-stopped" id="tradingStatusText">● 已停止</div>
+                        </div>
+                        <div class="status-card">
+                            <h3>止盈止损监控</h3>
+                            <div class="value" id="monitorStatus">未监控</div>
+                            <div class="status" id="monitorStatusText">-</div>
+                        </div>
+                        <div class="status-card">
+                            <h3>当前持仓数量</h3>
+                            <div class="value" id="positionCount">0</div>
+                            <div class="status">只可转债</div>
+                        </div>
+                        <div class="status-card">
+                            <h3>账户可用余额</h3>
+                            <div class="value" id="availableCash">¥0</div>
+                            <div class="status">元</div>
+                        </div>
+                        <div class="status-card">
+                            <h3>持仓盈亏</h3>
+                            <div class="value" id="totalProfitLoss">¥0</div>
+                            <div class="status">元</div>
+                        </div>
+                        <div class="status-card">
+                            <h3>持仓盈亏收益率</h3>
+                            <div class="value" id="profitLossYield">0%</div>
+                            <div class="status">总盈亏/总成本</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 当前持仓 -->
+                <div class="panel">
+                    <h2>当前持仓</h2>
+                    <table class="holdings-table">
+                        <thead>
+                            <tr>
+                                <th>代码</th>
+                                <th>名称</th>
+                                <th>持仓数量</th>
+                                <th>成本价</th>
+                                <th>当前价</th>
+                                <th>盈亏</th>
+                                <th>止盈价</th>
+                                <th>止损价</th>
+                            </tr>
+                        </thead>
+                        <tbody id="holdingsTableBody">
+                            <tr>
+                                <td colspan="8" class="empty-tip">暂无持仓数据</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 系统日志 -->
+                <div class="panel">
+                    <h2>系统日志</h2>
+                    <div class="log-area" id="logArea">
+                        <div class="log-entry">
+                            <span class="log-time">[--:--:--]</span>
+                            <span class="log-INFO">[INFO]</span> 等待登录...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 策略选择模态框 -->
+    <div class="modal" id="strategyModal">
+        <div class="modal-content strategy-modal-content">
+            <button class="modal-close" onclick="closeModal('strategyModal')">×</button>
+            <h1>选择运行策略</h1>
+            <div class="strategy-selection-area">
+                <div class="strategy-selection-panel">
+                    <h2>策略列表</h2>
+                    <ul class="strategy-list" id="strategyList">
+                        <li class="empty-tip">加载中...</li>
+                    </ul>
+                    <div class="pagination" id="strategyPagination"></div>
+                </div>
+
+                <div class="backtest-selection-panel disabled" id="backtestPanel">
+                    <h2>回测记录</h2>
+                    <div id="backtestList">
+                        <p class="empty-tip">请先选择一个策略</p>
+                    </div>
+                    <div class="pagination" id="backtestPagination"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 配置模态框 -->
+    <div class="modal" id="configModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('configModal')">×</button>
+            <h1>配置信息</h1>
+            <form class="config-form" id="configForm">
+                <div class="config-item">
+                    <label for="qmtPath">MiniQMT 程序路径 (userdata_mini 文件夹)</label>
+                    <input type="text" id="qmtPath" placeholder="例如：D:\迅投极速交易终端\userdata_mini">
+                </div>
+                <div class="config-item">
+                    <label for="accountId">证券账号</label>
+                    <input type="text" id="accountId" placeholder="请输入证券账号">
+                </div>
+                <div class="config-item">
+                    <label>单只买入金额方式</label>
+                    <div class="radio-group">
+                        <label>
+                            <input type="radio" name="buyAmountType" value="fixed">
+                            固定金额
+                        </label>
+                        <label>
+                            <input type="radio" name="buyAmountType" value="average" checked>
+                            按可用余额平均分配
+                        </label>
+                    </div>
+                </div>
+                <div class="config-item" id="fixedAmountGroup" style="display: none;">
+                    <label for="fixedAmount">固定金额（元）</label>
+                    <input type="number" id="fixedAmount" placeholder="每只可转债买入金额" value="10000">
+                </div>
+                <div class="config-item">
+                    <label>交易单类型</label>
+                    <div class="radio-group">
+                        <label>
+                            <input type="radio" name="orderType" value="limit" checked>
+                            限价单
+                        </label>
+                        <label>
+                            <input type="radio" name="orderType" value="market">
+                            市价单
+                        </label>
+                    </div>
+                </div>
+                <div class="config-item">
+                    <label for="notificationEmail">通知邮箱（可选）</label>
+                    <input type="email" id="notificationEmail" placeholder="交易异常时接收通知的邮箱">
+                </div>
+                <div class="config-item" style="border-top: 1px solid #eee; padding-top: 15px; margin-top: 10px;">
+                    <label style="font-weight: 600; color: #2c3e50;">选债调仓调度设置</label>
+                    <div style="margin-top: 10px;">
+                        <label style="font-size: 12px; color: #666; margin-bottom: 8px; display: block;">调度类型</label>
+                        <div class="radio-group">
+                            <label>
+                                <input type="radio" name="scheduleType" value="daily" checked>
+                                每天
+                            </label>
+                            <label>
+                                <input type="radio" name="scheduleType" value="weekly">
+                                每周
+                            </label>
+                            <label>
+                                <input type="radio" name="scheduleType" value="monthly">
+                                每月指定日期
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px;" id="weeklyDayGroup" style="display: none;">
+                        <label for="dayOfWeek" style="font-size: 12px; color: #666; margin-bottom: 5px; display: block;">选择星期（周一到周五）</label>
+                        <select id="dayOfWeek" style="width: 120px;">
+                            <option value="0">周一</option>
+                            <option value="1">周二</option>
+                            <option value="2">周三</option>
+                            <option value="3">周四</option>
+                            <option value="4">周五</option>
+                        </select>
+                    </div>
+                    <div style="margin-top: 10px;" id="monthlyDateGroup" style="display: none;">
+                        <label for="dayOfMonth" style="font-size: 12px; color: #666; margin-bottom: 5px; display: block;">每月日期（1-31）</label>
+                        <input type="number" id="dayOfMonth" min="1" max="31" value="5" style="width: 100px;">
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <label for="scheduleTime" style="font-size: 12px; color: #666; margin-bottom: 5px; display: block;">执行时间</label>
+                        <input type="time" id="scheduleTime" value="14:50" style="width: 120px;">
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeModal('configModal')">取消</button>
+                    <button type="submit" class="btn-primary">保存配置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 帮助文档模态框 -->
+    <div class="modal" id="helpModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('helpModal')">×</button>
+            <h1>帮助文档</h1>
+            
+            <div class="help-section">
+                <h2>📖 操作指南</h2>
+                <p><strong>1. 登录系统</strong> - 使用策略平台提供的账号密码登录。</p>
+                <p><strong>2. 选择策略</strong> - 点击"选择策略"，选择要使用的交易策略和回测记录。</p>
+                <p><strong>3. 配置信息</strong> - 点击"设置"，配置 MiniQMT 程序路径、证券账号等。</p>
+                <p><strong>4. 启动交易</strong> - 点击"运行"启动自动交易，系统将按策略自动执行。</p>
+            </div>
+
+            <div class="help-section">
+                <h2>❓ 常见问题</h2>
+                <p><strong>Q: 如何获取 MiniQMT 路径？</strong></p>
+                <p>A: 找到 MiniQMT 安装目录下的 userdata_mini 文件夹路径。</p>
+                <p><strong>Q: 止盈止损如何工作？</strong></p>
+                <p>A: 系统每分钟检查持仓，满足条件时自动执行卖出。</p>
+            </div>
+
+            <div class="help-section">
+                <h2>🔗 联系我们</h2>
+                <p>如有问题，请查看本地文档或联系技术支持。</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 风险提示 ====================
+        document.getElementById('riskDisclaimerConfirm').addEventListener('click', function() {
+            document.getElementById('riskDisclaimerOverlay').style.display = 'none';
+        });
+
+        // ==================== 脚本开始执行标记 ====================
+        console.log('[脚本] JavaScript 脚本开始执行');
+        
+        // ==================== JavaScript 错误捕获和日志记录 ====================
+        // 捕获全局 JavaScript 错误
+        window.addEventListener('error', function(event) {
+            var errorInfo = {
+                message: event.message || '未知错误',
+                source: event.filename || '未知文件',
+                lineno: event.lineno || 0,
+                colno: event.colno || 0,
+                error: event.error ? event.error.toString() : null,
+                stack: event.error && event.error.stack ? event.error.stack : null,
+                timestamp: new Date().toISOString()
+            };
+            
+            console.error('JavaScript 错误:', errorInfo);
+            
+            // 尝试发送到后端记录
+            try {
+                if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.log_js_error === 'function') {
+                    var logPromise = window.pywebview.api.log_js_error(
+                        errorInfo.message,
+                        errorInfo.source,
+                        errorInfo.lineno,
+                        errorInfo.colno,
+                        errorInfo.error,
+                        errorInfo.stack
+                    );
+                    if (logPromise && typeof logPromise.catch === 'function') {
+                        logPromise.catch(function(err) {
+                            console.error('发送错误日志失败:', err);
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error('记录错误日志异常:', e);
+            }
+            
+            // 在界面上显示错误（如果登录容器存在）
+            try {
+                var errorEl = document.getElementById('loginError');
+                if (errorEl) {
+                    errorEl.textContent = '页面错误: ' + errorInfo.message + ' (查看日志获取详细信息)';
+                    errorEl.style.display = 'block';
+                }
+            } catch (e) {
+                // 忽略显示错误
+            }
+        });
+        
+        // 捕获未处理的 Promise 拒绝（如果支持）
+        if (window.addEventListener) {
+            window.addEventListener('unhandledrejection', function(event) {
+                var errorInfo = {
+                    message: event.reason ? (event.reason.message || event.reason.toString()) : '未处理的 Promise 拒绝',
+                    stack: event.reason && event.reason.stack ? event.reason.stack : null,
+                    timestamp: new Date().toISOString()
+                };
+                
+                console.error('未处理的 Promise 拒绝:', errorInfo);
+                
+                // 尝试发送到后端记录
+                try {
+                    if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.log_js_error === 'function') {
+                        var logPromise = window.pywebview.api.log_js_error(
+                            errorInfo.message,
+                            'Promise',
+                            0,
+                            0,
+                            errorInfo.message,
+                            errorInfo.stack
+                        );
+                        if (logPromise && typeof logPromise.catch === 'function') {
+                            logPromise.catch(function(err) {
+                                console.error('发送错误日志失败:', err);
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error('记录错误日志异常:', e);
+                }
+            });
+        }
+        
+        // 重写 console.error 以捕获所有 console.error 调用
+        var originalConsoleError = console.error;
+        console.error = function() {
+            var args = Array.prototype.slice.call(arguments);
+            originalConsoleError.apply(console, args);
+            
+            // 尝试发送到后端记录
+            try {
+                if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.log_js_error === 'function') {
+                    var errorMsg = args.map(function(arg) {
+                        if (typeof arg === 'object') {
+                            try {
+                                return JSON.stringify(arg);
+                            } catch(e) {
+                                return String(arg);
+                            }
+                        }
+                        return String(arg);
+                    }).join(' ');
+                    
+                    var logPromise = window.pywebview.api.log_js_error(
+                        errorMsg,
+                        'console.error',
+                        0,
+                        0,
+                        errorMsg,
+                        null
+                    );
+                    if (logPromise && typeof logPromise.catch === 'function') {
+                        logPromise.catch(function(err) {
+                            // 忽略发送失败
+                        });
+                    }
+                }
+            } catch (e) {
+                // 忽略记录异常
+            }
+        };
+        
+        // ==================== 全局状态 ====================
+        var currentUser = null;
+        var selectedStrategyId = null;
+        var selectedStrategyName = null;
+        var selectedHistoryId = null;
+        var selectedHistoryNote = null;
+        var isRunning = false;
+        var strategyPage = 1;
+        var backtestPage = 1;
+
+        // ==================== PyWebView API 调用封装 ====================
+        function callApi(method) {
+            var startTime = Date.now();
+            var logError = null;
+            var args = Array.prototype.slice.call(arguments, 1);
+            
+            // 返回 Promise
+            return new Promise(function(resolve, reject) {
+                // 等待 pywebview 就绪（最多等待10秒）
+                var attempts = 0;
+                var maxAttempts = 100; // 10秒
+                
+                function waitForApi() {
+                    if ((window.pywebview && window.pywebview.api) || attempts >= maxAttempts) {
+                        checkAndCall();
+                    } else {
+                        attempts++;
+                        setTimeout(waitForApi, 100);
+                    }
+                }
+                
+                function checkAndCall() {
+                    if (!window.pywebview || !window.pywebview.api) {
+                        var errorMsg = 'PyWebView API 未就绪: ' + method;
+                        console.error(errorMsg);
+                        logError = errorMsg;
+                        tryLogJsError(errorMsg, 'callApi', 0, 0, errorMsg, null);
+                        resolve({ success: false, error: 'PyWebView API 未就绪，请刷新页面重试' });
+                        return;
+                    }
+                    
+                    // 检查方法是否存在
+                    if (typeof window.pywebview.api[method] !== 'function') {
+                        var errorMsg = 'API 方法不存在: ' + method;
+                        console.error(errorMsg);
+                        logError = errorMsg;
+                        tryLogJsError(errorMsg, 'callApi', 0, 0, errorMsg, null);
+                        resolve({ success: false, error: 'API 方法 ' + method + ' 不存在' });
+                        return;
+                    }
+                    
+                    // 记录 API 调用开始（敏感信息不记录）
+                    var safeArgs = method === 'login' 
+                        ? [args[0], '***'].concat(args.slice(2))  // 隐藏密码
+                        : args;
+                    console.log('[API调用] ' + method, safeArgs);
+                    
+                    // 调用 API
+                    try {
+                        var apiResult = window.pywebview.api[method].apply(window.pywebview.api, args);
+                        
+                        // 处理 Promise 结果
+                        if (apiResult && typeof apiResult.then === 'function') {
+                            apiResult.then(function(result) {
+                                var duration = Date.now() - startTime;
+                                console.log('[API结果] ' + method + ' (' + duration + 'ms)', result);
+                                processResult(result);
+                            }).catch(function(error) {
+                                var duration = Date.now() - startTime;
+                                var errorMsg = 'API 调用异常: ' + method + ' - ' + (error.message || error.toString());
+                                console.error('[API异常] ' + method + ' (' + duration + 'ms)', error);
+                                logError = errorMsg;
+                                tryLogJsError(errorMsg, 'callApi', 0, 0, error.toString(), error.stack || null);
+                                resolve({ success: false, error: 'API 调用异常: ' + (error.message || error.toString() || '调用失败') });
+                            });
+                        } else {
+                            // 同步返回结果
+                            var duration = Date.now() - startTime;
+                            console.log('[API结果] ' + method + ' (' + duration + 'ms)', apiResult);
+                            processResult(apiResult);
+                        }
+                    } catch (error) {
+                        var duration = Date.now() - startTime;
+                        var errorMsg = 'API 调用异常: ' + method + ' - ' + (error.message || error.toString());
+                        console.error('[API异常] ' + method + ' (' + duration + 'ms)', error);
+                        logError = errorMsg;
+                        tryLogJsError(errorMsg, 'callApi', 0, 0, error.toString(), error.stack || null);
+                        resolve({ success: false, error: 'API 调用异常: ' + (error.message || error.toString() || '调用失败') });
+                    }
+                }
+                
+                function processResult(result) {
+                    // 确保返回结果有正确的格式
+                    if (result === null || result === undefined) {
+                        var errorMsg = 'API 调用返回空值: ' + method;
+                        console.error(errorMsg);
+                        logError = errorMsg;
+                        tryLogJsError(errorMsg, 'callApi', 0, 0, errorMsg, null);
+                        resolve({ success: false, error: 'API 调用返回空值，请检查后端日志' });
+                        return;
+                    }
+                    
+                    // 如果返回结果没有 success 字段，尝试包装
+                    if (typeof result !== 'object' || !('success' in result)) {
+                        var errorMsg = 'API 返回格式异常: ' + method + ' - ' + JSON.stringify(result);
+                        console.warn(errorMsg);
+                        logError = errorMsg;
+                        tryLogJsError(errorMsg, 'callApi', 0, 0, errorMsg, null);
+                        resolve({ success: false, error: 'API 返回格式异常: ' + JSON.stringify(result) });
+                        return;
+                    }
+                    
+                    // 如果调用失败，记录错误
+                    if (!result.success && result.error) {
+                        var errorMsg = '[API失败] ' + method + ': ' + result.error;
+                        console.error(errorMsg);
+                        tryLogJsError(errorMsg, 'callApi', 0, 0, result.error, null);
+                    }
+                    
+                    resolve(result);
+                }
+                
+                // 开始等待 API
+                waitForApi();
+            });
+        }
+        
+        // 辅助函数：尝试记录 JavaScript 错误
+        function tryLogJsError(message, source, lineno, colno, error, stack) {
+            try {
+                // 先尝试直接调用（同步方式，不等待）
+                if (window.pywebview && window.pywebview.api) {
+                    if (typeof window.pywebview.api.log_js_error === 'function') {
+                        // 使用 Promise，但不等待结果（避免阻塞）
+                        var promise = window.pywebview.api.log_js_error(message, source, lineno, colno, error, stack);
+                        if (promise && typeof promise.catch === 'function') {
+                            promise.catch(function(err) {
+                                console.error('[日志] 发送错误日志失败:', err);
+                            });
+                        }
+                    } else {
+                        console.warn('[日志] log_js_error 方法不存在');
+                    }
+                } else {
+                    // API 未就绪时，只记录到 console
+                    console.log('[日志] API 未就绪，无法发送到后端:', message);
+                }
+            } catch (e) {
+                console.error('[日志] 记录错误日志异常:', e);
+            }
+        }
+        
+        // 立即测试：尝试记录脚本执行
+        setTimeout(function() {
+            tryLogJsError('[脚本] JavaScript 脚本已加载并开始执行', 'script', 0, 0, '', null);
+        }, 100);
+
+        // ==================== 初始化 ====================
+        window.addEventListener('DOMContentLoaded', function() {
+            console.log('[初始化] 页面加载完成，等待 PyWebView...');
+            tryLogJsError('[初始化] 页面加载完成', 'DOMContentLoaded', 0, 0, '', null);
+            
+            // 等待 PyWebView 就绪
+            var attempts = 0;
+            var maxAttempts = 50;
+            
+            function waitForPyWebView() {
+                if (window.pywebview || attempts >= maxAttempts) {
+                    if (!window.pywebview) {
+                        var errorMsg = 'PyWebView 未就绪（等待超时）';
+                        console.error(errorMsg);
+                        tryLogJsError(errorMsg, 'DOMContentLoaded', 0, 0, errorMsg, null);
+                        return;
+                    }
+                    
+                    console.log('[初始化] PyWebView 对象存在');
+                    waitForApi();
+                } else {
+                    attempts++;
+                    setTimeout(waitForPyWebView, 100);
+                }
+            }
+            
+            function waitForApi() {
+                attempts = 0;
+                function checkApi() {
+                    if (window.pywebview.api || attempts >= maxAttempts) {
+                        if (!window.pywebview.api) {
+                            var errorMsg = 'PyWebView API 未就绪（等待超时）';
+                            console.error(errorMsg);
+                            tryLogJsError(errorMsg, 'DOMContentLoaded', 0, 0, errorMsg, null);
+                            return;
+                        }
+                        
+                        console.log('[初始化] PyWebView API 已就绪');
+                        tryLogJsError('[初始化] PyWebView API 已就绪', 'DOMContentLoaded', 0, 0, '', null);
+                        
+                        // 测试 API 连接
+                        testApiConnection();
+                    } else {
+                        attempts++;
+                        setTimeout(checkApi, 100);
+                    }
+                }
+                checkApi();
+            }
+            
+            function testApiConnection() {
+                console.log('[初始化] 测试 API 连接...');
+                callApi('get_version').then(function(testResult) {
+                    console.log('[初始化] API 测试结果:', testResult);
+                    if (testResult && testResult.success) {
+                        tryLogJsError('[初始化] API 连接测试成功', 'DOMContentLoaded', 0, 0, '', null);
+                    } else {
+                        var errorMsg = testResult && testResult.error ? testResult.error : '未知错误';
+                        tryLogJsError('[初始化] API 连接测试失败: ' + errorMsg, 'DOMContentLoaded', 0, 0, JSON.stringify(testResult), null);
+                    }
+                    checkSavedAuth();
+                }).catch(function(e) {
+                    console.error('[初始化] API 测试异常:', e);
+                    tryLogJsError('[初始化] API 测试异常: ' + e.toString(), 'DOMContentLoaded', 0, 0, e.toString(), e.stack || null);
+                    checkSavedAuth();
+                });
+            }
+            
+            function checkSavedAuth() {
+                console.log('[初始化] 检查保存的登录信息...');
+                callApi('get_saved_auth').then(function(authResult) {
+                    console.log('[初始化] 获取登录信息结果:', authResult);
+                    
+                    if (authResult && authResult.success && authResult.data) {
+                        document.getElementById('username').value = authResult.data.username || '';
+                        document.getElementById('password').value = authResult.data.password || '';
+                        document.getElementById('rememberPassword').checked = authResult.data.remember_password;
+                        document.getElementById('autoLogin').checked = authResult.data.auto_login;
+                        
+                        // 自动登录
+                        if (authResult.data.auto_login && authResult.data.username) {
+                            console.log('[初始化] 尝试自动登录...');
+                            callApi('auto_login_with_token').then(function(autoResult) {
+                                console.log('[初始化] 自动登录结果:', autoResult);
+                                if (autoResult && autoResult.success && autoResult.data && autoResult.data.success) {
+                                    currentUser = autoResult.data.username;
+                                    showMainContainer();
+                                }
+                            }).catch(function(e) {
+                                console.error('[初始化] 自动登录异常:', e);
+                            });
+                        }
+                    }
+                }).catch(function(e) {
+                    console.error('[初始化] 检查登录信息异常:', e);
+                    tryLogJsError('[初始化] 检查登录信息异常: ' + e.toString(), 'DOMContentLoaded', 0, 0, e.toString(), e.stack || null);
+                });
+            }
+            
+            // 开始等待
+            waitForPyWebView();
+        });
+
+        // ==================== 登录功能 ====================
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            console.log('[登录] 表单提交事件触发');
+            tryLogJsError('[登录] 表单提交事件触发', 'loginForm.submit', 0, 0, '', null);
+            
+            var usernameInput = document.getElementById('username');
+            var passwordInput = document.getElementById('password');
+            var username = usernameInput.value.trim();
+            var password = passwordInput.value;
+            var remember = document.getElementById('rememberPassword').checked;
+            var autoLogin = document.getElementById('autoLogin').checked;
+            
+            var loginBtn = document.getElementById('loginBtn');
+            var errorEl = document.getElementById('loginError');
+            
+            console.log('[登录] 输入验证 - 用户名长度:', username.length, '密码长度:', password.length);
+            
+            // 验证输入
+            if (!username) {
+                var errorMsg = '请输入用户名';
+                errorEl.textContent = errorMsg;
+                errorEl.style.display = 'block';
+                console.warn('[登录] 验证失败:', errorMsg);
+                tryLogJsError('[登录] 验证失败: ' + errorMsg, 'loginForm.submit', 0, 0, '', null);
+                return;
+            }
+            if (!password) {
+                var errorMsg = '请输入密码';
+                errorEl.textContent = errorMsg;
+                errorEl.style.display = 'block';
+                console.warn('[登录] 验证失败:', errorMsg);
+                tryLogJsError('[登录] 验证失败: ' + errorMsg, 'loginForm.submit', 0, 0, '', null);
+                return;
+            }
+            
+            // 保存输入值（防止在 API 调用过程中被清空）
+            var savedUsername = username;
+            var savedPassword = password;
+            
+            console.log('[登录] 准备调用登录 API - 用户名:', savedUsername, 'remember:', remember, 'autoLogin:', autoLogin);
+            tryLogJsError('[登录] 准备调用登录 API', 'loginForm.submit', 0, 0, '用户名: ' + savedUsername + ', remember: ' + remember + ', autoLogin: ' + autoLogin, null);
+            
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<span class="loading"></span>登录中...';
+            errorEl.style.display = 'none';
+            
+            console.log('[登录] 开始调用 callApi("login", ...)');
+            var callStartTime = Date.now();
+            callApi('login', savedUsername, savedPassword, remember, autoLogin).then(function(result) {
+                var callDuration = Date.now() - callStartTime;
+                console.log('[登录] callApi 返回 (耗时 ' + callDuration + 'ms):', result);
+                
+                // 恢复按钮状态
+                loginBtn.disabled = false;
+                loginBtn.textContent = '登录';
+                
+                // 检查结果
+                if (!result) {
+                    var errorMsg = '登录失败：未收到服务器响应';
+                    console.error('[登录]', errorMsg);
+                    tryLogJsError('[登录] ' + errorMsg, 'loginForm.submit', 0, 0, '', null);
+                    errorEl.textContent = errorMsg;
+                    errorEl.style.display = 'block';
+                    // 恢复输入框值
+                    usernameInput.value = savedUsername;
+                    passwordInput.value = savedPassword;
+                    return;
+                }
+                
+                console.log('[登录] 检查返回结果 - success:', result.success, 'error:', result.error);
+                
+                if (result.success) {
+                    if (result.data && result.data.username) {
+                        console.log('[登录] 登录成功，用户名:', result.data.username);
+                        tryLogJsError('[登录] 登录成功: ' + result.data.username, 'loginForm.submit', 0, 0, '', null);
+                        currentUser = result.data.username;
+                        showMainContainer();
+                    } else {
+                        var errorMsg = '登录失败：返回数据格式异常';
+                        console.error('[登录]', errorMsg, result);
+                        tryLogJsError('[登录] ' + errorMsg, 'loginForm.submit', 0, 0, JSON.stringify(result), null);
+                        errorEl.textContent = errorMsg;
+                        errorEl.style.display = 'block';
+                        // 恢复输入框值
+                        usernameInput.value = savedUsername;
+                        passwordInput.value = savedPassword;
+                    }
+                } else {
+                    // 登录失败，显示错误信息
+                    var errorMsg = result.error || '登录失败，请检查用户名和密码';
+                    console.error('[登录] 登录失败:', errorMsg);
+                    tryLogJsError('[登录] 登录失败: ' + errorMsg, 'loginForm.submit', 0, 0, errorMsg, null);
+                    errorEl.textContent = errorMsg;
+                    errorEl.style.display = 'block';
+                    // 恢复输入框值（不清空）
+                    usernameInput.value = savedUsername;
+                    passwordInput.value = savedPassword;
+                }
+            }).catch(function(error) {
+                // 捕获所有异常
+                var errorMsg = '登录过程发生异常: ' + (error.message || error.toString());
+                console.error('[登录] 异常:', error);
+                tryLogJsError('[登录] 异常: ' + errorMsg, 'loginForm.submit', 0, 0, error.toString(), error.stack || null);
+                loginBtn.disabled = false;
+                loginBtn.textContent = '登录';
+                errorEl.textContent = errorMsg;
+                errorEl.style.display = 'block';
+                // 恢复输入框值
+                usernameInput.value = savedUsername;
+                passwordInput.value = savedPassword;
+            });
+        });
+
+        function showMainContainer() {
+            document.getElementById('loginContainer').style.display = 'none';
+            document.getElementById('mainContainer').style.display = 'flex';
+            document.getElementById('userInfo').textContent = '用户：' + currentUser;
+            
+            // 加载配置和状态
+            loadConfig();
+            loadCurrentStrategy();
+            loadTradingStatus();
+            
+            // 定时刷新
+            setInterval(refreshData, 5000);
+        }
+
+        // ==================== 策略选择 ====================
+        document.getElementById('selectStrategyBtn').addEventListener('click', function() {
+            document.getElementById('strategyModal').style.display = 'flex';
+            loadStrategies();
+        });
+
+        function loadStrategies(page) {
+            page = page || 1;
+            strategyPage = page;
+            var listEl = document.getElementById('strategyList');
+            listEl.innerHTML = '<li class="empty-tip">加载中...</li>';
+            
+            callApi('get_strategies', page, 10).then(function(result) {
+                if (result.success && result.data) {
+                    var items = result.data.items;
+                    var total_pages = result.data.total_pages;
+                    
+                    if (items.length === 0) {
+                        listEl.innerHTML = '<li class="empty-tip">暂无策略</li>';
+                    } else {
+                        listEl.innerHTML = items.map(function(item) {
+                            return '<li class="strategy-item" data-id="' + item.id + '" data-name="' + item.name + '">' +
+                                item.name +
+                                '<span style="color:#999;font-size:11px;margin-left:8px;">(' + item.backtest_count + '次回测)</span>' +
+                                '</li>';
+                        }).join('');
+                        
+                        // 绑定点击事件
+                        listEl.querySelectorAll('.strategy-item').forEach(function(item) {
+                            item.addEventListener('click', function() {
+                                selectStrategy(item);
+                            });
+                        });
+                    }
+                    
+                    // 渲染分页
+                    renderPagination('strategyPagination', page, total_pages, loadStrategies);
+                } else {
+                    listEl.innerHTML = '<li class="empty-tip">' + (result.error || '加载失败') + '</li>';
+                }
+            }).catch(function(error) {
+                listEl.innerHTML = '<li class="empty-tip">加载失败: ' + error.toString() + '</li>';
+            });
+        }
+
+        function selectStrategy(item) {
+            document.querySelectorAll('#strategyList .strategy-item').forEach(function(i) {
+                i.classList.remove('active');
+            });
+            item.classList.add('active');
+            
+            selectedStrategyId = parseInt(item.dataset.id);
+            selectedStrategyName = item.dataset.name;
+            
+            // 加载回测记录
+            loadBacktestHistories(selectedStrategyId);
+        }
+
+        function loadBacktestHistories(strategyId, page) {
+            page = page || 1;
+            backtestPage = page;
+            var panel = document.getElementById('backtestPanel');
+            var listEl = document.getElementById('backtestList');
+            
+            panel.classList.remove('disabled');
+            listEl.innerHTML = '<p class="empty-tip">加载中...</p>';
+            
+            callApi('get_backtest_histories', strategyId, page, 10).then(function(result) {
+                if (result.success && result.data) {
+                    var items = result.data.items;
+                    var total_pages = result.data.total_pages;
+                    
+                    if (items.length === 0) {
+                        listEl.innerHTML = '<p class="empty-tip">暂无回测记录</p>';
+                    } else {
+                        listEl.innerHTML = items.map(function(item) {
+                            var returnStr = item.strategy_return != null ? '收益率: ' + item.strategy_return.toFixed(2) + '%' : '';
+                            var dateStr = item.backtest_time ? new Date(item.backtest_time).toLocaleDateString() : '';
+                            return '<div class="backtest-item-detail" data-id="' + item.id + '" data-note="' + dateStr + ' ' + returnStr + '">' +
+                                '<h3>' + (dateStr || '回测记录 #' + item.id) + '</h3>' +
+                                '<p>' + returnStr + (item.sharpe_ratio != null ? ' | 夏普: ' + item.sharpe_ratio.toFixed(2) : '') + '</p>' +
+                                '</div>';
+                        }).join('');
+                        
+                        // 绑定点击事件
+                        listEl.querySelectorAll('.backtest-item-detail').forEach(function(item) {
+                            item.addEventListener('click', function() {
+                                selectBacktest(item);
+                            });
+                        });
+                    }
+                    
+                    // 渲染分页
+                    renderPagination('backtestPagination', page, total_pages, function(p) {
+                        loadBacktestHistories(strategyId, p);
+                    });
+                } else {
+                    listEl.innerHTML = '<p class="empty-tip">' + (result.error || '加载失败') + '</p>';
+                }
+            }).catch(function(error) {
+                listEl.innerHTML = '<p class="empty-tip">加载失败: ' + error.toString() + '</p>';
+            });
+        }
+
+        function selectBacktest(item) {
+            document.querySelectorAll('.backtest-item-detail').forEach(function(i) {
+                i.classList.remove('selected');
+            });
+            item.classList.add('selected');
+            
+            selectedHistoryId = parseInt(item.dataset.id);
+            selectedHistoryNote = item.dataset.note;
+            
+            // 保存策略选择
+            callApi('select_strategy', selectedStrategyId, selectedStrategyName, selectedHistoryId, selectedHistoryNote).then(function(result) {
+                if (result.success) {
+                    updateStrategyDisplay();
+                    closeModal('strategyModal');
+                } else {
+                    alert('选择策略失败: ' + result.error);
+                }
+            }).catch(function(error) {
+                alert('选择策略失败: ' + error.toString());
+            });
+        }
+
+        function updateStrategyDisplay() {
+            var el = document.getElementById('currentStrategy');
+            if (selectedStrategyName && selectedHistoryNote) {
+                // 获取调度配置并显示
+                getScheduleDisplayText().then(function(scheduleText) {
+                    if (scheduleText) {
+                        el.textContent = selectedStrategyName + ' | ' + selectedHistoryNote + ' | ' + scheduleText;
+                    } else {
+                        el.textContent = selectedStrategyName + ' | ' + selectedHistoryNote;
+                    }
+                    el.classList.remove('empty');
+                });
+            } else {
+                el.textContent = '未选择策略';
+                el.classList.add('empty');
+            }
+        }
+
+        function getScheduleDisplayText() {
+            return callApi('get_current_strategy').then(function(strategyResult) {
+                if (strategyResult.success && strategyResult.data && strategyResult.data.execution_schedule) {
+                    var schedule = strategyResult.data.execution_schedule;
+                    var time = schedule.time || '14:50';
+                    
+                    if (schedule.type === 'daily') {
+                        return '每天 ' + time;
+                    } else if (schedule.type === 'weekly') {
+                        var dayOfWeek = schedule.day_of_week || 0;
+                        var days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+                        return '每周' + days[dayOfWeek] + ' ' + time;
+                    } else if (schedule.type === 'monthly') {
+                        var day = schedule.day_of_month || 5;
+                        return '每月' + day + '号 ' + time;
+                    }
+                }
+                return null;
+            });
+        }
+
+        function loadCurrentStrategy() {
+            callApi('get_current_strategy').then(function(result) {
+                if (result.success && result.data) {
+                    selectedStrategyId = result.data.strategy_id;
+                    selectedStrategyName = result.data.strategy_name;
+                    selectedHistoryId = result.data.history_id;
+                    selectedHistoryNote = result.data.history_note;
+                    updateStrategyDisplay();
+                    // 同时更新调度配置显示
+                    loadScheduleConfig();
+                }
+            });
+        }
+
+        function renderPagination(containerId, currentPage, totalPages, callback) {
+            var container = document.getElementById(containerId);
+            if (totalPages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            var html = '';
+            for (var i = 1; i <= totalPages; i++) {
+                html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="(${callback.toString()})(${i})">${i}</button>`;
+            }
+            container.innerHTML = html;
+        }
+
+        // ==================== 运行控制 ====================
+        document.getElementById('runBtn').addEventListener('click', function() {
+            if (!isRunning) {
+                startTrading();
+            } else {
+                stopTrading();
+            }
+        });
+
+        function startTrading() {
+            var runBtn = document.getElementById('runBtn');
+            runBtn.disabled = true;
+            runBtn.textContent = '启动中...';
+            
+            callApi('start_trading').then(function(result) {
+                runBtn.disabled = false;
+                
+                if (result.success) {
+                    isRunning = true;
+                    runBtn.textContent = '⏸️ 停止';
+                    runBtn.classList.add('running');
+                    updateTradingStatusUI(true);
+                } else {
+                    alert('启动失败: ' + result.error);
+                    runBtn.textContent = '▶️ 运行';
+                }
+            }).catch(function(error) {
+                runBtn.disabled = false;
+                alert('启动失败: ' + error.toString());
+                runBtn.textContent = '▶️ 运行';
+            });
+        }
+
+        function stopTrading() {
+            var runBtn = document.getElementById('runBtn');
+            runBtn.disabled = true;
+            
+            callApi('stop_trading').then(function(result) {
+                runBtn.disabled = false;
+                
+                if (result.success) {
+                    isRunning = false;
+                    runBtn.textContent = '▶️ 运行';
+                    runBtn.classList.remove('running');
+                    updateTradingStatusUI(false);
+                } else {
+                    alert('停止失败: ' + result.error);
+                }
+            }).catch(function(error) {
+                runBtn.disabled = false;
+                alert('停止失败: ' + error.toString());
+            });
+        }
+
+        function updateTradingStatusUI(running) {
+            var statusEl = document.getElementById('tradingStatus');
+            var statusTextEl = document.getElementById('tradingStatusText');
+            var monitorEl = document.getElementById('monitorStatus');
+            var monitorTextEl = document.getElementById('monitorStatusText');
+            
+            if (running) {
+                statusEl.textContent = '运行中';
+                statusTextEl.textContent = '● 正常运行';
+                statusTextEl.className = 'status status-running';
+                monitorEl.textContent = '监控中';
+                monitorTextEl.textContent = '每1分钟检查';
+            } else {
+                statusEl.textContent = '未运行';
+                statusTextEl.textContent = '● 已停止';
+                statusTextEl.className = 'status status-stopped';
+                monitorEl.textContent = '未监控';
+                monitorTextEl.textContent = '-';
+            }
+        }
+
+        function loadTradingStatus() {
+            callApi('get_trading_status').then(function(result) {
+                if (result.success && result.data) {
+                    isRunning = result.data.running;
+                    updateTradingStatusUI(isRunning);
+                    
+                    var runBtn = document.getElementById('runBtn');
+                    if (isRunning) {
+                        runBtn.textContent = '⏸️ 停止';
+                        runBtn.classList.add('running');
+                    } else {
+                        runBtn.textContent = '▶️ 运行';
+                        runBtn.classList.remove('running');
+                    }
+                }
+            });
+        }
+
+        // ==================== 数据刷新 ====================
+        function refreshData() {
+            refreshAsset();
+            refreshPositions();
+            refreshLogs();
+        }
+
+        function refreshAsset() {
+            callApi('get_asset').then(function(result) {
+                if (result.success && result.data) {
+                    document.getElementById('availableCash').textContent = '¥' + result.data.cash.toLocaleString();
+                }
+            });
+        }
+
+        function refreshPositions() {
+            callApi('get_positions').then(function(result) {
+                var tbody = document.getElementById('holdingsTableBody');
+                var totalProfitLossEl = document.getElementById('totalProfitLoss');
+                var profitLossYieldEl = document.getElementById('profitLossYield');
+
+                if (result.success && result.data && result.data.length > 0) {
+                    document.getElementById('positionCount').textContent = result.data.length;
+
+                    var totalProfitLoss = result.data.reduce(function(sum, pos) { return sum + pos.profit_loss; }, 0);
+                    var totalCost = result.data.reduce(function(sum, pos) { return sum + pos.avg_price * pos.volume; }, 0);
+                    var profitLossYield = totalCost > 0 ? totalProfitLoss / totalCost : 0;
+
+                    var profitSign = totalProfitLoss >= 0 ? '+' : '';
+                    totalProfitLossEl.textContent = '¥' + profitSign + totalProfitLoss.toFixed(2);
+                    totalProfitLossEl.className = 'value ' + (totalProfitLoss >= 0 ? 'profit-positive' : 'profit-negative');
+                    profitLossYieldEl.textContent = (profitLossYield * 100).toFixed(2) + '%';
+                    profitLossYieldEl.className = 'value ' + (profitLossYield >= 0 ? 'profit-positive' : 'profit-negative');
+
+                    tbody.innerHTML = result.data.map(function(pos) {
+                        var profitClass = pos.profit_loss >= 0 ? 'profit-positive' : 'profit-negative';
+                        var profitSign = pos.profit_loss >= 0 ? '+' : '';
+                        return '<tr>' +
+                            '<td>' + pos.stock_code + '</td>' +
+                            '<td>' + (pos.stock_name || '-') + '</td>' +
+                            '<td>' + pos.volume + '</td>' +
+                            '<td>' + pos.avg_price.toFixed(3) + '</td>' +
+                            '<td>' + pos.current_price.toFixed(3) + '</td>' +
+                            '<td class="' + profitClass + '">' + profitSign + pos.profit_loss.toFixed(2) + '</td>' +
+                            '<td>' + pos.stop_profit_price.toFixed(3) + '</td>' +
+                            '<td>' + pos.stop_loss_price.toFixed(3) + '</td>' +
+                            '</tr>';
+                    }).join('');
+                } else {
+                    document.getElementById('positionCount').textContent = '0';
+                    totalProfitLossEl.textContent = '¥0';
+                    totalProfitLossEl.className = 'value';
+                    profitLossYieldEl.textContent = '0%';
+                    profitLossYieldEl.className = 'value';
+                    tbody.innerHTML = '<tr><td colspan="8" class="empty-tip">暂无持仓数据</td></tr>';
+                }
+            });
+        }
+
+        function refreshLogs() {
+            callApi('get_logs', 50).then(function(result) {
+                if (result.success && result.data) {
+                    var logArea = document.getElementById('logArea');
+                    logArea.innerHTML = result.data.map(function(log) {
+                        return '<div class="log-entry">' +
+                            '<span class="log-time">[' + log.time + ']</span>' +
+                            '<span class="log-' + log.level + '">[' + log.level + ']</span> ' + log.message +
+                            '</div>';
+                    }).join('');
+                }
+            });
+        }
+
+        // ==================== 配置管理 ====================
+        document.getElementById('configBtn').addEventListener('click', function() {
+            document.getElementById('configModal').style.display = 'flex';
+            loadConfig(); // 打开时加载配置
+        });
+
+        document.querySelectorAll('input[name="buyAmountType"]').forEach(function(radio) {
+            radio.addEventListener('change', function(e) {
+                document.getElementById('fixedAmountGroup').style.display = 
+                    e.target.value === 'fixed' ? 'block' : 'none';
+            });
+        });
+
+        // 调度类型切换时显示/隐藏每月日期输入框和每周日期选择框
+        document.querySelectorAll('input[name="scheduleType"]').forEach(function(radio) {
+            radio.addEventListener('change', function(e) {
+                var monthlyGroup = document.getElementById('monthlyDateGroup');
+                var weeklyGroup = document.getElementById('weeklyDayGroup');
+                monthlyGroup.style.display = e.target.value === 'monthly' ? 'block' : 'none';
+                weeklyGroup.style.display = e.target.value === 'weekly' ? 'block' : 'none';
+            });
+        });
+
+        document.getElementById('configForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            var config = {
+                qmt_path: document.getElementById('qmtPath').value,
+                account_id: document.getElementById('accountId').value,
+                buy_amount_type: document.querySelector('input[name="buyAmountType"]:checked').value,
+                fixed_amount: parseFloat(document.getElementById('fixedAmount').value) || 10000,
+                order_type: document.querySelector('input[name="orderType"]:checked').value,
+                notification_email: document.getElementById('notificationEmail').value
+            };
+            
+            callApi('save_config', config).then(function(configResult) {
+                if (!configResult.success) {
+                    alert('保存配置失败: ' + configResult.error);
+                    return;
+                }
+                
+                // 保存调度配置
+                var scheduleType = document.querySelector('input[name="scheduleType"]:checked').value;
+                var scheduleTime = document.getElementById('scheduleTime').value;
+                var execution_schedule = {
+                    type: scheduleType,
+                    time: scheduleTime
+                };
+                
+                if (scheduleType === 'weekly') {
+                    var dayOfWeek = parseInt(document.getElementById('dayOfWeek').value) || 0;
+                    execution_schedule.day_of_week = dayOfWeek;
+                } else if (scheduleType === 'monthly') {
+                    var dayOfMonth = parseInt(document.getElementById('dayOfMonth').value) || 5;
+                    execution_schedule.day_of_month = Math.max(1, Math.min(31, dayOfMonth));
+                }
+                
+                callApi('update_execution_schedule', execution_schedule).then(function(scheduleResult) {
+                    if (scheduleResult.success) {
+                        alert('配置已保存');
+                        closeModal('configModal');
+                        // 更新策略显示
+                        loadCurrentStrategy();
+                    } else {
+                        alert('保存调度配置失败: ' + scheduleResult.error);
+                    }
+                }).catch(function(error) {
+                    alert('保存调度配置失败: ' + error.toString());
+                });
+            }).catch(function(error) {
+                alert('保存配置失败: ' + error.toString());
+            });
+        });
+
+        function loadConfig() {
+            callApi('get_config').then(function(result) {
+                if (result.success && result.data) {
+                    document.getElementById('qmtPath').value = result.data.qmt_path || '';
+                    document.getElementById('accountId').value = result.data.account_id || '';
+                    document.getElementById('fixedAmount').value = result.data.fixed_amount || 10000;
+                    document.getElementById('notificationEmail').value = result.data.notification_email || '';
+                    
+                    var buyAmountType = result.data.buy_amount_type || 'average';
+                    document.querySelector('input[name="buyAmountType"][value="' + buyAmountType + '"]').checked = true;
+                    var orderType = result.data.order_type || 'limit';
+                    document.querySelector('input[name="orderType"][value="' + orderType + '"]').checked = true;
+                    
+                    document.getElementById('fixedAmountGroup').style.display = 
+                        result.data.buy_amount_type === 'fixed' ? 'block' : 'none';
+                    
+                    // 加载调度配置
+                    loadScheduleConfig();
+                }
+            });
+        }
+
+        function loadScheduleConfig() {
+            callApi('get_current_strategy').then(function(strategyResult) {
+                if (strategyResult.success && strategyResult.data && strategyResult.data.execution_schedule) {
+                    var schedule = strategyResult.data.execution_schedule;
+                    
+                    // 设置调度类型
+                    var scheduleType = schedule.type || 'daily';
+                    document.querySelector('input[name="scheduleType"][value="' + scheduleType + '"]').checked = true;
+                    
+                    // 设置执行时间
+                    document.getElementById('scheduleTime').value = schedule.time || '14:50';
+                    
+                    // 设置每周日期
+                    if (scheduleType === 'weekly') {
+                        var dayOfWeek = schedule.day_of_week || 0;
+                        document.getElementById('dayOfWeek').value = dayOfWeek;
+                        document.getElementById('weeklyDayGroup').style.display = 'block';
+                    } else {
+                        document.getElementById('weeklyDayGroup').style.display = 'none';
+                    }
+                    
+                    // 设置每月日期
+                    if (scheduleType === 'monthly') {
+                        document.getElementById('dayOfMonth').value = schedule.day_of_month || 5;
+                        document.getElementById('monthlyDateGroup').style.display = 'block';
+                    } else {
+                        document.getElementById('monthlyDateGroup').style.display = 'none';
+                    }
+                } else {
+                    // 默认值
+                    document.querySelector('input[name="scheduleType"][value="daily"]').checked = true;
+                    document.getElementById('scheduleTime').value = '14:50';
+                    document.getElementById('weeklyDayGroup').style.display = 'none';
+                    document.getElementById('monthlyDateGroup').style.display = 'none';
+                }
+            });
+        }
+
+        // ==================== 帮助 ====================
+        document.getElementById('helpBtn').addEventListener('click', function() {
+            document.getElementById('helpModal').style.display = 'flex';
+        });
+
+        async function openHelpUrl() {
+            await callApi('open_help_url');
+        }
+
+        // ==================== 模态框 ====================
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // 点击模态框外部关闭
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    // 配置信息弹窗点击外部时不关闭
+                    if (modal.id !== 'configModal') {
+                        modal.style.display = 'none';
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+
