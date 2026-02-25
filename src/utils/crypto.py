@@ -2,25 +2,51 @@
 加密工具模块 - 用于密码加密存储
 """
 import base64
+import hashlib
 import os
+import platform
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-# 应用密钥（实际生产中应该从环境变量或配置文件读取）
-APP_SECRET = b"qmt_auto_secret_key_2024"
+
+def _get_machine_secret() -> bytes:
+    """
+    基于机器特征生成密钥种子
+
+    使用机器名 + 用户名 + 应用名称的哈希值作为密钥种子，
+    确保每台机器的密钥不同。
+    """
+    machine_name = platform.node()
+    username = os.getlogin()
+    app_identifier = "qmt-cb-rotation"
+
+    # 组合特征并哈希
+    combined = f"{machine_name}|{username}|{app_identifier}".encode('utf-8')
+    return hashlib.sha256(combined).digest()
+
+
+def _get_machine_salt() -> bytes:
+    """基于机器特征生成 salt"""
+    machine_name = platform.node()
+    username = os.getlogin()
+    combined = f"salt|{machine_name}|{username}".encode('utf-8')
+    return hashlib.sha256(combined).digest()[:16]  # 取前16字节作为 salt
 
 
 def _get_fernet() -> Fernet:
     """获取 Fernet 加密器"""
+    # 使用机器特征作为密钥种子
+    secret = _get_machine_secret()
+
     # 使用 PBKDF2 从密钥派生加密密钥
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=b"qmt_salt",
+        salt=_get_machine_salt(),
         iterations=100000,
     )
-    key = base64.urlsafe_b64encode(kdf.derive(APP_SECRET))
+    key = base64.urlsafe_b64encode(kdf.derive(secret))
     return Fernet(key)
 
 
