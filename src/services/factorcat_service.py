@@ -7,6 +7,7 @@ from loguru import logger
 
 from src.models.schemas import LoginResult, StrategyInfo, BacktestHistory, BondInfo
 from src.services.update_service import UpdateService
+from src.utils.retry import retry
 
 
 class FactorCatService:
@@ -262,24 +263,30 @@ class FactorCatService:
         result = self._request('GET', f'/strategies/{strategy_id}/histories/{history_id}')
         return result
     
+    @retry(
+        max_attempts=3,
+        initial_delay=1.0,
+        backoff_factor=2.0,
+        exceptions=(Exception,)
+    )
     def get_today_bonds(self, strategy_history_id: int) -> List[BondInfo]:
         """
         基于历史回测记录获取今日选债列表
-        
+
         Args:
             strategy_history_id: 回测记录ID
-            
+
         Returns:
             选债列表
         """
         logger.info(f"正在获取今日选债列表, history_id={strategy_history_id}")
-        
+
         data = {
             'strategy_history_id': strategy_history_id
         }
-        
+
         result = self._request('POST', '/bond-selection/today-bond-selection', json=data)
-        
+
         # 解析选债结果
         bonds = []
         if isinstance(result, list) and len(result) > 0:
@@ -291,7 +298,7 @@ class FactorCatService:
                     price=bond.get('price'),
                     trade_date=bond.get('trade_date')
                 ))
-        
+
         logger.success(f"获取选债列表成功，共 {len(bonds)} 只可转债")
         return bonds
     
