@@ -326,25 +326,25 @@ class SchedulerService:
     def _is_trading_time(self) -> bool:
         """
         检查是否在交易时间
-        
+
         Returns:
             是否在交易时间
         """
         if not self._is_trading_day():
             return False
-        
-        now = now().time()
-        
+
+        current_time = now().time()
+
         # 上午交易时间: 9:30 - 11:30
         morning_start = time(9, 30)
         morning_end = time(11, 30)
-        
+
         # 下午交易时间: 13:00 - 15:00
         afternoon_start = time(13, 0)
         afternoon_end = time(15, 0)
-        
-        return (morning_start <= now <= morning_end or 
-                afternoon_start <= now <= afternoon_end)
+
+        return (morning_start <= current_time <= morning_end or
+                afternoon_start <= current_time <= afternoon_end)
     
     def trigger_bond_selection_now(self) -> None:
         """立即触发选债任务（用于测试）"""
@@ -359,7 +359,7 @@ class SchedulerService:
     def get_scheduler_status(self) -> dict[str, Any]:
         """获取调度器详细状态（用于调试定时任务问题）"""
         jobs = self.scheduler.get_jobs()
-        now = now()
+        current_time = now()
 
         return {
             'running': self._running,
@@ -374,7 +374,7 @@ class SchedulerService:
                 }
                 for job in jobs
             ],
-            'current_time': now.strftime('%Y-%m-%d %H:%M:%S'),
+            'current_time': current_time.strftime('%Y-%m-%d %H:%M:%S'),
             'timezone': str(self.scheduler.timezone),
         }
 
