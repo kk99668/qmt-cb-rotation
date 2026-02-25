@@ -2,6 +2,7 @@
 自动交易核心逻辑服务
 """
 from datetime import datetime, time
+from threading import Lock
 from typing import Any, Callable
 
 from loguru import logger
@@ -35,6 +36,10 @@ class AutoTradeService:
 
         # 日志回调
         self.log_callback: Callable[[str, str], None] | None = None
+
+        # 线程安全：调仓锁和运行标志
+        self._rebalance_lock = Lock()
+        self._rebalance_running = False
     
     def set_config(self, app_config: AppConfig, strategy_config: StrategyConfig) -> None:
         """设置配置"""
@@ -85,55 +90,74 @@ class AutoTradeService:
 
         self._log("INFO", "开始执行选债调仓...")
 
+        # 双重检查：标志位和锁
+        if self._rebalance_running:
+            self._log("WARNING", "调仓任务正在执行中，请勿重复触发")
+            return
+
+        # 获取锁（非阻塞）
+        if not self._rebalance_lock.acquire(blocking=False):
+            self._log("WARNING", "调仓任务正在执行中（已锁定），请稍后重试")
+            return
+
         try:
-            # 1. 获取今日选债列表
-            self._log("INFO", "正在获取今日选债列表...")
-            target_bonds = self.factorcat.get_today_bonds(self.strategy_config.history_id)
-            target_codes = {bond.code for bond in target_bonds}
-            self._log("SUCCESS", f"获取选债列表成功，共 {len(target_bonds)} 只可转债")
-            
-            if not target_bonds:
-                self._log("WARNING", "今日选债列表为空，跳过调仓")
-                return
-            
-            # 2. 获取当前持仓
-            self._log("INFO", "正在获取当前持仓...")
-            current_positions = self.qmt.get_positions()
-            current_codes = {pos.stock_code for pos in current_positions}
-            self._log("SUCCESS", f"当前持仓 {len(current_positions)} 只可转债")
-            
-            # 3. 获取项目持仓记录（只卖出项目买入的可转债）
-            project_records = {}
-            if self.database:
-                records = self.database.get_position_records()
-                project_records = {r.stock_code: r for r in records}
-                self._log("INFO", f"项目持仓记录 {len(project_records)} 只可转债")
-            
-            # 4. 计算需要卖出和买入的
-            # 待卖出 = 项目记录 ∩ (账户持仓 - 选债列表)
-            to_sell_codes = set(project_records.keys()) & (current_codes - target_codes)
-            to_buy = target_codes - current_codes   # 目标有，持仓无 -> 买入
-            
-            self._log("INFO", f"需要卖出: {len(to_sell_codes)} 只（仅项目买入的）, 需要买入: {len(to_buy)} 只")
-            
-            # 5. 执行卖出（只卖出项目记录中的可转债）
-            for code in to_sell_codes:
-                self._sell_bond(code, current_positions, project_records.get(code))
-            
-            # 6. 计算买入金额
-            buy_amount = self._calculate_buy_amount(len(to_buy))
-            self._log("INFO", f"单只买入金额: {buy_amount:.2f} 元")
-            
-            # 7. 执行买入
-            for code in to_buy:
-                self._buy_bond(code, buy_amount)
-            
-            self._log("SUCCESS", "选债调仓执行完成")
-            
-        except Exception as rebalance_error:
-            error_msg = f"选债调仓执行失败: {str(rebalance_error)}"
-            self._log("ERROR", error_msg)
-            self.notification.send_trade_error_notification("选债调仓失败", error_msg)
+            self._rebalance_running = True
+
+            # --- 以下为原有逻辑，保持不变 ---
+            try:
+                # 1. 获取今日选债列表
+                self._log("INFO", "正在获取今日选债列表...")
+                target_bonds = self.factorcat.get_today_bonds(self.strategy_config.history_id)
+                target_codes = {bond.code for bond in target_bonds}
+                self._log("SUCCESS", f"获取选债列表成功，共 {len(target_bonds)} 只可转债")
+
+                if not target_bonds:
+                    self._log("WARNING", "今日选债列表为空，跳过调仓")
+                    return
+
+                # 2. 获取当前持仓
+                self._log("INFO", "正在获取当前持仓...")
+                current_positions = self.qmt.get_positions()
+                current_codes = {pos.stock_code for pos in current_positions}
+                self._log("SUCCESS", f"当前持仓 {len(current_positions)} 只可转债")
+
+                # 3. 获取项目持仓记录（只卖出项目买入的可转债）
+                project_records = {}
+                if self.database:
+                    records = self.database.get_position_records()
+                    project_records = {r.stock_code: r for r in records}
+                    self._log("INFO", f"项目持仓记录 {len(project_records)} 只可转债")
+
+                # 4. 计算需要卖出和买入的
+                # 待卖出 = 项目记录 ∩ (账户持仓 - 选债列表)
+                to_sell_codes = set(project_records.keys()) & (current_codes - target_codes)
+                to_buy = target_codes - current_codes   # 目标有，持仓无 -> 买入
+
+                self._log("INFO", f"需要卖出: {len(to_sell_codes)} 只（仅项目买入的）, 需要买入: {len(to_buy)} 只")
+
+                # 5. 执行卖出（只卖出项目记录中的可转债）
+                for code in to_sell_codes:
+                    self._sell_bond(code, current_positions, project_records.get(code))
+
+                # 6. 计算买入金额
+                buy_amount = self._calculate_buy_amount(len(to_buy))
+                self._log("INFO", f"单只买入金额: {buy_amount:.2f} 元")
+
+                # 7. 执行买入
+                for code in to_buy:
+                    self._buy_bond(code, buy_amount)
+
+                self._log("SUCCESS", "选债调仓执行完成")
+
+            except Exception as rebalance_error:
+                error_msg = f"选债调仓执行失败: {str(rebalance_error)}"
+                self._log("ERROR", error_msg)
+                self.notification.send_trade_error_notification("选债调仓失败", error_msg)
+
+        finally:
+            # 确保锁和标志位被释放
+            self._rebalance_running = False
+            self._rebalance_lock.release()
     
     def execute_stop_profit_loss_check(self) -> None:
         """
