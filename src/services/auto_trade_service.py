@@ -1,7 +1,7 @@
 """
 自动交易核心逻辑服务
 """
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any, Callable
 
 from loguru import logger
@@ -756,7 +756,8 @@ class AutoTradeService:
         # 检查是否超过 14:50
         now_time = now()
         current_time = now_time.time()
-        refill_deadline = datetime.strptime("14:50", "%H:%M").time()
+        # time() 对象只包含时分秒，不涉及时区比较
+        refill_deadline = time(14, 50)
 
         if current_time > refill_deadline:
             self._log(
