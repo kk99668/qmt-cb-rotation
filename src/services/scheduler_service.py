@@ -274,12 +274,12 @@ class SchedulerService:
     def _execute_qmt_health_check(self) -> None:
         """执行QMT健康检测"""
         # 添加日志（降低频率，每5分钟输出一次）
-        now = now()
+        current_time = now()
         if self._last_health_log_time is None:
-            self._last_health_log_time = now
-        if (now - self._last_health_log_time).total_seconds() >= 300:  # 5分钟
+            self._last_health_log_time = current_time
+        if (current_time - self._last_health_log_time).total_seconds() >= 300:  # 5分钟
             logger.info("[调度器触发] QMT健康检测任务运行中")
-            self._last_health_log_time = now
+            self._last_health_log_time = current_time
 
         if self._qmt_health_check_callback:
             try:
