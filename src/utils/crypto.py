@@ -8,6 +8,7 @@ import platform
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from loguru import logger
 
 
 def _get_machine_secret() -> bytes:
@@ -86,9 +87,8 @@ def decrypt_password(encrypted_password: str) -> str:
         encrypted = base64.urlsafe_b64decode(encrypted_password.encode('utf-8'))
         decrypted = fernet.decrypt(encrypted)
         return decrypted.decode('utf-8')
-    except Exception as e:
+    except Exception:
         # 解密失败可能是由于密钥变更，记录日志
-        from loguru import logger
-        logger.warning(f"密码解密失败，可能是由于加密密钥变更（版本升级），请重新登录: {e}")
+        logger.warning("密码解密失败，可能是由于加密密钥变更（版本升级），请重新登录")
         return ""
 
