@@ -14,7 +14,7 @@ class FactorCatService:
     """因子猫 API 对接服务"""
     
     # API 基础地址
-    BASE_URL = "https://factor-cat.mzs2025.asia:8003"
+    BASE_URL = "https://api.yinzimao.com:8003"
     
     def __init__(self, base_url: Optional[str] = None) -> None:
         self.base_url = base_url or self.BASE_URL

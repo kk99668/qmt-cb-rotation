@@ -1,0 +1,2 @@
+- 因子猫 API 基准地址更新为 https://api.yinzimao.com:8003
+- PyInstaller 打包时排除 PyQt6，避免与 PyQt5 同时存在导致构建失败

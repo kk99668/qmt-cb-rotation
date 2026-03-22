@@ -14,7 +14,7 @@ class UpdateService:
     """更新检查服务"""
     
     # 当前版本
-    CURRENT_VERSION = "1.1.0"
+    CURRENT_VERSION = "1.1.1"
     
     # 更新检查地址（如需启用更新检查，请配置实际的更新服务器地址）
     UPDATE_URL = ""
